@@ -1,12 +1,18 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { LogOut, Gamepad2, MapPin, Languages, ExternalLink } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, spacing, activityLabel, statusColor } from "@/src/lib/theme";
 import { useAuth } from "@/src/lib/auth";
+import { ConnectSteamCard, ConnectRiotCard } from "@/src/components/IntegrationCards";
 
 export default function Profile() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refresh } = useAuth();
+
+  useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
+
   if (!user) return null;
 
   const status = user.activity_status || "online";
@@ -57,6 +63,14 @@ export default function Profile() {
             <Text style={styles.bio} testID="profile-bio">{user.bio}</Text>
           </View>
         ) : null}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Linked Accounts</Text>
+          <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+            <ConnectSteamCard user={user} onRefresh={refresh} />
+            <ConnectRiotCard user={user} onRefresh={refresh} />
+          </View>
+        </View>
 
         <View style={styles.section}>
           <View style={styles.steamRow}>

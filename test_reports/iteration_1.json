@@ -1,0 +1,37 @@
+{
+  "summary": "Full E2E test pass for Gaming Buddy Steam + Riot integration. Backend: 21/21 pytest tests pass including real Faker (Hide on bush#KR1, KR) Riot link returning LEVEL 913 / CHALLENGER I / top 3 champions (LeBlanc, Azir, Sylas with names mapped via Data Dragon). Steam OpenID URL is properly formed with checkid_setup mode and nonce-bearing callback. /api/auth/me correctly exposes riot_id, lol_profile, steam_persona_name, top_games (response_model removal verified). Frontend: Profile screen renders Linked Accounts with steam-connect-card + riot-connect-card. Riot unlink → re-link cycle fully functional via UI; LEVEL 913, SOLO/DUO CHALLENGER I 1862 LP 266W/212L, and 3 champion names render correctly. No deprecated Expo packages detected. Regression suite (signup, login, swipe feed, swipe like/pass/superlike, mutual match, messages, standout) all green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_gaming_buddy.py",
+    "/app/backend/tests/test_integrations.py",
+    "/app/test_reports/pytest/results.xml"
+  ],
+  "action_items": [
+    "Optional: backend/server.py is 759 lines — consider splitting routes into modules (auth, swipe, integrations) once feature work stabilises (>700 line threshold).",
+    "Optional polish: Profile shows a 'Steam Library' section seeded from signup top_games when Steam isn't actually linked — label may be misleading until OpenID link completes. Consider hiding the 'STEAM' badge unless steam_id is set."
+  ],
+  "critical_code_review_comments": [
+    "server.py: response_model intentionally removed from /api/auth/me, /api/profile/me, /api/auth/signup, /api/auth/login so riot_id/lol_profile flow through. OK functionally but OpenAPI docs lose typing — acceptable trade-off, documented in the request.",
+    "integrations.py: Riot _riot_get raises clear RuntimeError on 401/403/429/5xx with user-friendly text; surfaced as HTTP 400 in /api/riot/link. Good UX.",
+    "Steam OpenID nonce is single-use (find_one_and_delete) and stored in DB — secure pattern, no token leakage via state param.",
+    "champion-mastery and league entries failures are silently swallowed (try/except RuntimeError); user-visible profile still works with partial data. Reasonable but worth logging."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_integrations.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "No persistent seed data created. Each integration test creates a transient signup user (intg_*@test.com). NovaStrike seed user was used for UI testing and has Riot linked (Hide on bush#KR1) as a side-effect of UI testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Riot dev key (RGAPI-35175e6c-...) is currently valid as of 2026-06-07 15:55 UTC. Riot dev keys expire every 24h — if test_link_real_account_faker starts skipping with 'expired' message, re-rotate the key in /app/backend/.env. Steam OpenID full E2E (actual Steam login + games library import) cannot be automated and was not tested; the auth-url shape + steam-linked.tsx deep-link route are verified.",
+  "rca_of_issue": "N/A — no failures."
+}

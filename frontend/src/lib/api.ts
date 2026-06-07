@@ -51,4 +51,10 @@ export const api = {
   getMessages: (matchId: string) => request(`/messages/${matchId}`),
   sendMessage: (matchId: string, text: string) =>
     request(`/messages/${matchId}`, { method: "POST", body: JSON.stringify({ text }) }),
+  steamAuthUrl: (redirect_uri: string) =>
+    request(`/steam/auth-url?redirect_uri=${encodeURIComponent(redirect_uri)}`),
+  steamUnlink: () => request("/steam/unlink", { method: "POST" }),
+  riotLink: (riot_id: string, platform: string) =>
+    request("/riot/link", { method: "POST", body: JSON.stringify({ riot_id, platform }) }),
+  riotUnlink: () => request("/riot/unlink", { method: "POST" }),
 };

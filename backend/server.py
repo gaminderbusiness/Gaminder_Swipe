@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request
+from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,9 +9,18 @@ import secrets
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
+from urllib.parse import quote, urlencode
 import uuid
 import bcrypt
 from datetime import datetime, timezone, timedelta
+
+from integrations import (
+    build_steam_openid_url,
+    verify_steam_openid,
+    fetch_steam_profile_and_games,
+    fetch_riot_lol_profile,
+    load_champion_mapping,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -161,7 +171,12 @@ def public_user(u: dict) -> dict:
         "profile_photo": u.get("profile_photo", ""),
         "steam_avatar": u.get("steam_avatar"),
         "steam_profile_url": u.get("steam_profile_url"),
+        "steam_persona_name": u.get("steam_persona_name"),
+        "steam_linked": bool(u.get("steam_id")),
         "top_games": u.get("top_games", []),
+        "riot_id": u.get("riot_id"),
+        "riot_platform": u.get("riot_platform"),
+        "lol_profile": u.get("lol_profile"),
         "last_active": last,
         "activity_status": compute_activity(last),
     }
@@ -252,7 +267,7 @@ async def root():
     return {"message": "Gaming Buddy API"}
 
 
-@api_router.post("/auth/signup", response_model=AuthResp)
+@api_router.post("/auth/signup")
 async def signup(body: SignupBody):
     existing = await db.users.find_one({"email": body.email.lower()})
     if existing:
@@ -284,7 +299,7 @@ async def signup(body: SignupBody):
     return {"token": token, "user": me_user(user_doc)}
 
 
-@api_router.post("/auth/login", response_model=AuthResp)
+@api_router.post("/auth/login")
 async def login(body: LoginBody):
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not check_password(body.password, user["password_hash"]):
@@ -297,13 +312,13 @@ async def login(body: LoginBody):
     return {"token": token, "user": me_user(user)}
 
 
-@api_router.get("/auth/me", response_model=UserMe)
+@api_router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)):
     user = await refresh_quotas(user)
     return me_user(user)
 
 
-@api_router.put("/profile/me", response_model=UserMe)
+@api_router.put("/profile/me")
 async def update_profile(body: UpdateProfileBody, user: dict = Depends(get_current_user)):
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if "top_games" in updates:
@@ -597,6 +612,127 @@ async def seed_users():
 @app.on_event("startup")
 async def on_startup():
     await seed_users()
+    # Preload Riot Data Dragon champion mapping (non-blocking on failure)
+    try:
+        await load_champion_mapping()
+    except Exception:
+        pass
+
+
+# ============================================================================
+# Steam linking endpoints
+# ============================================================================
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "")
+
+
+@api_router.get("/steam/auth-url")
+async def steam_auth_url(redirect_uri: str, user: dict = Depends(get_current_user)):
+    if not PUBLIC_BASE_URL:
+        raise HTTPException(status_code=500, detail="PUBLIC_BASE_URL not configured")
+    # Use a one-time link nonce stored server-side instead of bearer token in state
+    nonce = secrets.token_urlsafe(24)
+    await db.steam_link_nonces.insert_one({
+        "nonce": nonce,
+        "user_id": user["id"],
+        "redirect_uri": redirect_uri,
+        "created_at": now().isoformat(),
+    })
+    callback_url = (
+        f"{PUBLIC_BASE_URL}/api/steam/callback?nonce={quote(nonce)}"
+    )
+    realm = PUBLIC_BASE_URL
+    auth_url = build_steam_openid_url(callback_url, realm)
+    return {"auth_url": auth_url}
+
+
+@api_router.get("/steam/callback")
+async def steam_callback(request: Request):
+    params = dict(request.query_params)
+    nonce = params.get("nonce")
+    if not nonce:
+        raise HTTPException(status_code=400, detail="Missing nonce")
+    link_rec = await db.steam_link_nonces.find_one_and_delete({"nonce": nonce})
+    if not link_rec:
+        raise HTTPException(status_code=400, detail="Invalid or expired link nonce")
+
+    steam_id = await verify_steam_openid(params)
+    redirect_uri = link_rec.get("redirect_uri") or "/"
+    sep = "&" if "?" in redirect_uri else "?"
+    if not steam_id:
+        return RedirectResponse(url=f"{redirect_uri}{sep}status=error&reason=verify_failed", status_code=302)
+
+    profile_data, top_games, profile_private = await fetch_steam_profile_and_games(steam_id)
+
+    update_doc = {
+        "steam_id": steam_id,
+        "steam_avatar": profile_data.get("avatarfull") or profile_data.get("avatar"),
+        "steam_profile_url": profile_data.get("profileurl"),
+        "steam_persona_name": profile_data.get("personaname"),
+        "steam_profile_private": profile_private,
+        "steam_linked_at": now().isoformat(),
+    }
+    if top_games:
+        # Replace top_games with Steam library
+        update_doc["top_games"] = [{"name": g["name"], "hours": int(g["hours"])} for g in top_games]
+    await db.users.update_one({"id": link_rec["user_id"]}, {"$set": update_doc})
+
+    qparts = ["status=success"]
+    if profile_private:
+        qparts.append("profile_private=1")
+    return RedirectResponse(url=f"{redirect_uri}{sep}{'&'.join(qparts)}", status_code=302)
+
+
+# ============================================================================
+# Riot linking endpoints
+# ============================================================================
+class RiotLinkBody(BaseModel):
+    riot_id: str
+    platform: str
+
+
+@api_router.post("/riot/link")
+async def riot_link(body: RiotLinkBody, user: dict = Depends(get_current_user)):
+    try:
+        profile = await fetch_riot_lol_profile(body.riot_id, body.platform)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=502, detail="Failed to fetch Riot data")
+
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "riot_id": profile["riot_id"],
+            "riot_platform": profile["platform"],
+            "riot_puuid": profile["puuid"],
+            "lol_profile": {
+                "summoner_level": profile["summoner_level"],
+                "solo_rank": profile["solo_rank"],
+                "flex_rank": profile["flex_rank"],
+                "top_champions": profile["top_champions"],
+            },
+            "riot_linked_at": now().isoformat(),
+        }},
+    )
+    return {"riot_id": profile["riot_id"], "lol_profile": profile}
+
+
+@api_router.post("/riot/unlink")
+async def riot_unlink(user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$unset": {"riot_id": "", "riot_platform": "", "riot_puuid": "", "lol_profile": "", "riot_linked_at": ""}},
+    )
+    return {"ok": True}
+
+
+@api_router.post("/steam/unlink")
+async def steam_unlink(user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$unset": {"steam_id": "", "steam_avatar": "", "steam_profile_url": "", "steam_persona_name": "", "steam_profile_private": "", "steam_linked_at": ""}},
+    )
+    return {"ok": True}
 
 
 # Include router
