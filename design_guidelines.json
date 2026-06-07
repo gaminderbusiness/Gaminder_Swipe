@@ -1,0 +1,147 @@
+{
+  "theme": "Dark",
+  "archetype": "Archetype 7: Electric & Neon",
+  "design_philosophy": "Inspired by Tinder's swipe simplicity and Discord's immersive dark atmosphere. Designed for gamers, highlighting deep blacks with intentional neon blue and purple accents to create a premium, night-time gaming feel.",
+  "colors": {
+    "background_primary": "#050505",
+    "surface_card": "#0F0F13",
+    "surface_glass": "rgba(15, 15, 19, 0.7)",
+    "accent_primary_neon_blue": "#00E5FF",
+    "accent_secondary_purple": "#8B5CF6",
+    "text_primary": "#F8FAFC",
+    "text_secondary": "#94A3B8",
+    "text_muted": "#52525B",
+    "status_online": "#10B981",
+    "status_away": "#FBBF24",
+    "status_offline": "#3F3F46",
+    "action_pass": "#EC4899",
+    "action_like": "#00E5FF",
+    "action_superlike": "#8B5CF6"
+  },
+  "typography": {
+    "font_family_heading": "System",
+    "font_family_body": "System",
+    "h1": {
+      "font_size": "40px",
+      "font_weight": "800",
+      "letter_spacing": "-1px"
+    },
+    "h2": {
+      "font_size": "32px",
+      "font_weight": "700",
+      "letter_spacing": "-0.5px"
+    },
+    "h3": {
+      "font_size": "24px",
+      "font_weight": "600",
+      "letter_spacing": "0px"
+    },
+    "body": {
+      "font_size": "16px",
+      "font_weight": "400",
+      "line_height": "24px"
+    },
+    "label": {
+      "font_size": "12px",
+      "font_weight": "600",
+      "letter_spacing": "1px",
+      "text_transform": "uppercase"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "xs": "4px",
+      "sm": "8px",
+      "md": "16px",
+      "lg": "24px",
+      "xl": "32px",
+      "2xl": "48px"
+    },
+    "border_radius": {
+      "sm": "8px",
+      "md": "12px",
+      "lg": "24px",
+      "pill": "9999px"
+    }
+  },
+  "components": {
+    "swipe_card": {
+      "style": "Full-height image taking up 70-80% of the screen. Absolute positioning.",
+      "border_radius": "24px",
+      "overlay": "LinearGradient from transparent to rgba(5,5,5,0.95) at the bottom 40% to ensure text readability.",
+      "border": "1px solid rgba(255,255,255,0.05)"
+    },
+    "game_tag": {
+      "background": "rgba(139, 92, 246, 0.15)",
+      "border": "1px solid rgba(139, 92, 246, 0.5)",
+      "border_radius": "12px",
+      "padding": "6px 12px",
+      "text_color": "#F8FAFC"
+    },
+    "match_percentage_badge": {
+      "background": "rgba(0, 229, 255, 0.1)",
+      "border": "1px solid rgba(0, 229, 255, 0.6)",
+      "text_color": "#00E5FF",
+      "text_shadow": "0px 0px 8px rgba(0, 229, 255, 0.5)",
+      "icon": "lucide-react-native Sparkles"
+    },
+    "bottom_navigation": {
+      "background": "Dark translucent view with BlurView equivalent style",
+      "active_icon_color": "#00E5FF",
+      "inactive_icon_color": "#52525B",
+      "border_top": "1px solid rgba(255,255,255,0.05)"
+    },
+    "buttons": {
+      "primary": {
+        "background": "LinearGradient or solid #8B5CF6",
+        "border_radius": "9999px",
+        "text_color": "#FFFFFF",
+        "shadow": "0px 4px 12px rgba(139, 92, 246, 0.3)"
+      },
+      "secondary": {
+        "background": "rgba(255,255,255,0.05)",
+        "border": "1px solid rgba(255,255,255,0.1)",
+        "border_radius": "9999px"
+      }
+    }
+  },
+  "interactions_and_animations": {
+    "swipe_gestures": "Use react-native-reanimated for smooth 60fps Tinder-like swiping. Map X-translation to rotation (max 15deg at screen edge).",
+    "swipe_overlays": "As card moves right, fade in 'LIKE' neon badge. As card moves left, fade in 'PASS' badge.",
+    "button_press": "Scale down to 0.95 on press-in, scale back to 1 on press-out using React Native Animated or Reanimated."
+  },
+  "media_urls": {
+    "profile_portraits": [
+      {
+        "url": "https://images.pexels.com/photos/9071735/pexels-photo-9071735.jpeg",
+        "category": "gamer_profile_1",
+        "description": "Focused gamer playing esports in neon room"
+      },
+      {
+        "url": "https://images.pexels.com/photos/34179709/pexels-photo-34179709.jpeg",
+        "category": "gamer_profile_2",
+        "description": "Smiling male gamer in esports jersey"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1530651788726-1dbf58eeef1f",
+        "category": "gamer_profile_3",
+        "description": "Woman sitting between fluorescent lights"
+      },
+      {
+        "url": "https://images.pexels.com/photos/9071724/pexels-photo-9071724.jpeg",
+        "category": "gamer_profile_4",
+        "description": "Young man with tattoos in gaming setting"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Build standard React Native Expo app files. Use standard React Native StyleSheet unless NativeWind is pre-configured.",
+    "For the Tinder swipe card, use react-native-reanimated and react-native-gesture-handler. Do not use outdated swipe deck libraries.",
+    "Ensure all backgrounds use the #050505 deep black. Avoid standard #000000 to maintain depth.",
+    "Implement the linear gradient overlay on the swipe card using expo-linear-gradient to ensure text readability over the image.",
+    "Always use lucide-react-native for icons. Specifically, use icons like Gamepad2, Sparkles, MessageSquare, User, Flame.",
+    "Add 'data-testid' to all touchables, buttons, and form inputs for robust automated testing.",
+    "Since the user specified 'iOS-first', use standard iOS Safe Area insets (SafeAreaView) and smooth spring animations.",
+    "Do not use HTML tags like <div> or <span>; this is React Native (<View>, <Text>, <TouchableOpacity>, <Image>)."
+  ]
+}
