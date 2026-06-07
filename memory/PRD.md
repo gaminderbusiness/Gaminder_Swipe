@@ -25,7 +25,12 @@ Gaming Buddy is a mobile app (React Native Expo, iOS-first) that helps gamers di
 Score (1-99) = shared games (50pts) + playtime similarity (20pts) + country match (15pts) + shared language (15pts), with a minimum floor based on deterministic hash to ensure every card shows a meaningful percentage.
 
 ## Out of Scope (MVP)
-Premium subs, voice/video chat, forums, file sharing, Xbox/PlayStation integration, real Steam OAuth (mocked), dating mode.
+Premium subs, voice/video chat, forums, file sharing, Xbox/PlayStation integration, dating mode.
+
+## Real Integrations (added)
+- **Steam OpenID** linking via expo-web-browser → backend `/api/steam/auth-url` + `/api/steam/callback`. Fetches GetPlayerSummaries + GetOwnedGames, replaces top_games with real Steam library.
+- **Riot Games API** (LoL) linking via Riot ID + platform region. Fetches account-v1 → summoner-v4 → league-v4 → champion-mastery-v4. Champion IDs resolved via Data Dragon (cached at startup). Shows summoner level, Solo/Duo + Flex rank, top 3 champions with names.
+- Both linking flows exposed in Profile tab "Linked Accounts" section with Connect/Unlink toggle.
 
 ## Routes
 - `/auth/welcome`, `/auth/login`, `/auth/signup`
