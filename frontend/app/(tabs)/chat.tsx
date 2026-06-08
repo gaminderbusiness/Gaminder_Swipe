@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndi
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { MessageCircle } from "lucide-react-native";
-import { colors, radius, spacing, activityLabel, statusColor } from "@/src/lib/theme";
+import { useTheme, radius, spacing, statusColorFn, type ColorPalette } from "@/src/lib/theme";
 import { api } from "@/src/lib/api";
 
 export default function ChatList() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,7 +36,7 @@ export default function ChatList() {
       </View>
 
       {loading ? (
-        <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.neonBlue} /></View>
+        <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.primary} /></View>
       ) : matches.length === 0 ? (
         <View style={styles.empty} testID="chat-empty">
           <MessageCircle size={48} color={colors.textMuted} />
@@ -54,7 +56,7 @@ export default function ChatList() {
             >
               <View>
                 <Image source={{ uri: item.user.profile_photo }} style={styles.avatar} />
-                <View style={[styles.statusDot, { backgroundColor: statusColor(item.user.activity_status), borderColor: colors.surface }]} />
+                <View style={[styles.statusDot, { backgroundColor: statusColorFn(item.user.activity_status, colors), borderColor: colors.surface }]} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{item.user.username}</Text>
@@ -71,7 +73,7 @@ export default function ChatList() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md },
   h1: { color: colors.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },

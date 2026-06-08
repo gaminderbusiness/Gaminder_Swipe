@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Sparkles, Star, Zap } from "lucide-react-native";
-import { colors, radius, spacing, activityLabel, statusColor } from "@/src/lib/theme";
+import { Sparkles, Star } from "lucide-react-native";
+import { useTheme, radius, spacing, activityLabel, statusColorFn, type ColorPalette } from "@/src/lib/theme";
 import { api } from "@/src/lib/api";
 import MatchModal from "@/src/components/MatchModal";
 
 export default function Standout() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,11 +46,11 @@ export default function Standout() {
       </View>
 
       {loading ? (
-        <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.neonBlue} /></View>
+        <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.primary} /></View>
       ) : (
         <ScrollView
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.neonBlue} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
           {profiles.length === 0 ? (
             <Text style={styles.empty}>No standout profiles yet. Check back soon!</Text>
@@ -57,12 +59,12 @@ export default function Standout() {
               <View key={p.id} style={styles.card} testID={`standout-${p.username}`}>
                 <Image source={{ uri: p.profile_photo }} style={styles.img} />
                 <View style={styles.matchBadge}>
-                  <Sparkles size={12} color={colors.neonBlue} />
+                  <Sparkles size={12} color={colors.primary} />
                   <Text style={styles.matchText}>{p.match_percentage}%</Text>
                 </View>
                 <View style={styles.body}>
                   <View style={styles.statusRow}>
-                    <View style={[styles.dot, { backgroundColor: statusColor(p.activity_status) }]} />
+                    <View style={[styles.dot, { backgroundColor: statusColorFn(p.activity_status, colors) }]} />
                     <Text style={styles.status}>{activityLabel(p.activity_status, p.last_active)}</Text>
                   </View>
                   <Text style={styles.name}>{p.username}, {p.age}</Text>
@@ -75,7 +77,7 @@ export default function Standout() {
                     </View>
                   ) : null}
                   <TouchableOpacity testID={`super-${p.username}`} style={styles.superBtn} onPress={() => sendSuperLike(p.id)}>
-                    <Star size={16} color={colors.purple} fill={colors.purple} />
+                    <Star size={16} color={colors.accent} fill={colors.accent} />
                     <Text style={styles.superText}>Send Super Like</Text>
                   </TouchableOpacity>
                 </View>
@@ -90,7 +92,7 @@ export default function Standout() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md },
   h1: { color: colors.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },
@@ -99,8 +101,8 @@ const styles = StyleSheet.create({
   empty: { color: colors.textSecondary, textAlign: "center", marginTop: spacing.xl },
   card: { backgroundColor: colors.surface, borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
   img: { width: "100%", height: 200 },
-  matchBadge: { position: "absolute", top: 12, right: 12, flexDirection: "row", gap: 4, alignItems: "center", backgroundColor: "rgba(0,229,255,0.18)", borderWidth: 1, borderColor: "rgba(0,229,255,0.6)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
-  matchText: { color: colors.neonBlue, fontSize: 12, fontWeight: "800" },
+  matchBadge: { position: "absolute", top: 12, right: 12, flexDirection: "row", gap: 4, alignItems: "center", backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
+  matchText: { color: colors.primary, fontSize: 12, fontWeight: "800" },
   body: { padding: spacing.md, gap: 6 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
@@ -108,8 +110,8 @@ const styles = StyleSheet.create({
   name: { color: colors.textPrimary, fontSize: 20, fontWeight: "700" },
   meta: { color: colors.textSecondary, fontSize: 13 },
   tags: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  tag: { backgroundColor: colors.purpleSoft, borderWidth: 1, borderColor: "rgba(139,92,246,0.5)", paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.sm },
+  tag: { backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.borderStrong, paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.sm },
   tagText: { color: colors.textPrimary, fontSize: 12, fontWeight: "600" },
-  superBtn: { marginTop: spacing.sm, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, backgroundColor: colors.purpleSoft, borderWidth: 1, borderColor: "rgba(139,92,246,0.6)", borderRadius: radius.pill },
-  superText: { color: colors.purple, fontWeight: "700" },
+  superBtn: { marginTop: spacing.sm, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.accent, borderRadius: radius.pill },
+  superText: { color: colors.accent, fontWeight: "700" },
 });

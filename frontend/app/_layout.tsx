@@ -7,11 +7,13 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider, useAuth } from "@/src/lib/auth";
+import { ThemeProvider, useTheme } from "@/src/lib/theme";
 
 SplashScreen.preventAutoHideAsync();
 
 function RootNav() {
   const { user, loading } = useAuth();
+  const { colors, mode } = useTheme();
   const segments = useSegments();
   const router = useRouter();
 
@@ -26,7 +28,21 @@ function RootNav() {
     }
   }, [user, loading, segments, router]);
 
-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#050505" } }} />;
+  return (
+    <>
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
+    </>
+  );
+}
+
+function RootShell({ children }: { children: React.ReactNode }) {
+  const { colors } = useTheme();
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <SafeAreaProvider>{children}</SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
 }
 
 export default function RootLayout() {
@@ -41,13 +57,12 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#050505" }}>
-      <SafeAreaProvider>
-        <AuthProvider>
-          <StatusBar style="light" />
+    <ThemeProvider>
+      <AuthProvider>
+        <RootShell>
           <RootNav />
-        </AuthProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+        </RootShell>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, FlatList, K
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, Send } from "lucide-react-native";
-import { colors, radius, spacing, activityLabel, statusColor } from "@/src/lib/theme";
+import { useTheme, radius, spacing, activityLabel, statusColorFn, type ColorPalette } from "@/src/lib/theme";
 import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/lib/auth";
 
@@ -11,6 +11,8 @@ export default function ChatScreen() {
   const router = useRouter();
   const { matchId } = useLocalSearchParams<{ matchId: string }>();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [messages, setMessages] = useState<any[]>([]);
   const [other, setOther] = useState<any>(null);
   const [text, setText] = useState("");
@@ -31,7 +33,6 @@ export default function ChatScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll every 3s
   useEffect(() => {
     const id = setInterval(() => load(true), 3000);
     return () => clearInterval(id);
@@ -62,7 +63,7 @@ export default function ChatScreen() {
             <View>
               <Text style={styles.name} testID="chat-other-name">{other.username}</Text>
               <View style={styles.statusRow}>
-                <View style={[styles.dot, { backgroundColor: statusColor(other.activity_status) }]} />
+                <View style={[styles.dot, { backgroundColor: statusColorFn(other.activity_status, colors) }]} />
                 <Text style={styles.statusText}>{activityLabel(other.activity_status, other.last_active)}</Text>
               </View>
             </View>
@@ -72,7 +73,7 @@ export default function ChatScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }} keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}>
         {loading ? (
-          <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.neonBlue} /></View>
+          <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.primary} /></View>
         ) : (
           <FlatList
             ref={listRef}
@@ -84,7 +85,7 @@ export default function ChatScreen() {
               return (
                 <View style={[styles.bubbleRow, isMine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
                   <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]} testID={`msg-${item.id}`}>
-                    <Text style={[styles.msgText, isMine && { color: "#fff" }]}>{item.text}</Text>
+                    <Text style={[styles.msgText, isMine && styles.msgTextMine]}>{item.text}</Text>
                   </View>
                 </View>
               );
@@ -110,7 +111,7 @@ export default function ChatScreen() {
             maxLength={500}
           />
           <TouchableOpacity testID="send-btn" style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]} onPress={send} disabled={!text.trim() || sending}>
-            <Send size={20} color="#fff" />
+            <Send size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -118,9 +119,9 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: "row", alignItems: "center", padding: spacing.md, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  header: { flexDirection: "row", alignItems: "center", padding: spacing.md, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.bg },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   headerCenter: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   avatar: { width: 40, height: 40, borderRadius: 20 },
@@ -132,10 +133,11 @@ const styles = StyleSheet.create({
   bubbleRowMine: { justifyContent: "flex-end" },
   bubbleRowTheirs: { justifyContent: "flex-start" },
   bubble: { maxWidth: "78%", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
-  bubbleMine: { backgroundColor: colors.purple, borderBottomRightRadius: 4 },
+  bubbleMine: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
   bubbleTheirs: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
   msgText: { color: colors.textPrimary, fontSize: 15, lineHeight: 20 },
+  msgTextMine: { color: "#FFFFFF" },
   inputBar: { flexDirection: "row", alignItems: "flex-end", gap: 8, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg },
   input: { flex: 1, color: colors.textPrimary, backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.lg, fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: colors.border },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.neonBlue, alignItems: "center", justifyContent: "center" },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
 });

@@ -3,17 +3,18 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboa
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plus, X } from "lucide-react-native";
-import { colors, radius, spacing } from "@/src/lib/theme";
+import { useTheme, radius, spacing, type ColorPalette } from "@/src/lib/theme";
 import { useAuth } from "@/src/lib/auth";
 
-const COUNTRIES = ["USA", "UK", "Canada", "Germany", "France", "Japan", "Brazil", "Australia", "India", "Sweden", "Mexico", "Netherlands", "South Korea", "Russia", "China", "Other"];
-const LANG_OPTIONS = ["English", "Spanish", "French", "German", "Portuguese", "Japanese", "Korean", "Mandarin", "Russian", "Italian", "Dutch", "Swedish"];
-
+const COUNTRIES = ["USA", "UK", "Canada", "Germany", "France", "Japan", "Brazil", "Australia", "India", "Sweden", "Mexico", "Netherlands", "South Korea", "Russia", "China", "Turkey", "Other"];
+const LANG_OPTIONS = ["English", "Spanish", "French", "German", "Portuguese", "Japanese", "Korean", "Mandarin", "Russian", "Italian", "Dutch", "Swedish", "Turkish"];
 const SUGGESTED_GAMES = ["Valorant", "CS2", "League of Legends", "Dota 2", "Apex Legends", "Fortnite", "Overwatch 2", "Rocket League", "Rust", "Minecraft", "Destiny 2", "Elden Ring", "Final Fantasy XIV", "World of Warcraft", "Genshin Impact"];
 
 export default function Signup() {
   const router = useRouter();
   const { signUp } = useAuth();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,7 +65,7 @@ export default function Signup() {
         country,
         languages,
         bio,
-        profile_photo: `https://api.dicebear.com/7.x/adventurer/png?seed=${photoSeed}&backgroundColor=8b5cf6`,
+        profile_photo: `https://api.dicebear.com/7.x/adventurer/png?seed=${photoSeed}&backgroundColor=ff6a1a`,
         top_games: games,
       });
     } catch (e: any) {
@@ -107,12 +108,7 @@ export default function Signup() {
             <Text style={styles.label}>Country</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
               {COUNTRIES.map(c => (
-                <TouchableOpacity
-                  key={c}
-                  testID={`country-${c}`}
-                  onPress={() => setCountry(c)}
-                  style={[styles.chip, country === c && styles.chipActive]}
-                >
+                <TouchableOpacity key={c} testID={`country-${c}`} onPress={() => setCountry(c)} style={[styles.chip, country === c && styles.chipActive]}>
                   <Text style={[styles.chipText, country === c && styles.chipTextActive]}>{c}</Text>
                 </TouchableOpacity>
               ))}
@@ -123,12 +119,7 @@ export default function Signup() {
             <Text style={styles.label}>Languages</Text>
             <View style={styles.wrap}>
               {LANG_OPTIONS.map(l => (
-                <TouchableOpacity
-                  key={l}
-                  testID={`lang-${l}`}
-                  onPress={() => toggleLang(l)}
-                  style={[styles.chip, languages.includes(l) && styles.chipActive]}
-                >
+                <TouchableOpacity key={l} testID={`lang-${l}`} onPress={() => toggleLang(l)} style={[styles.chip, languages.includes(l) && styles.chipActive]}>
                   <Text style={[styles.chipText, languages.includes(l) && styles.chipTextActive]}>{l}</Text>
                 </TouchableOpacity>
               ))}
@@ -141,12 +132,12 @@ export default function Signup() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Top Games (Steam style)</Text>
+            <Text style={styles.label}>Top Games</Text>
             <View style={{ flexDirection: "row", gap: 8 }}>
               <TextInput testID="game-name-input" value={gameInput} onChangeText={setGameInput} placeholder="Game name" placeholderTextColor={colors.textMuted} style={[styles.input, { flex: 2 }]} />
               <TextInput testID="game-hours-input" value={hoursInput} onChangeText={setHoursInput} keyboardType="number-pad" placeholder="Hours" placeholderTextColor={colors.textMuted} style={[styles.input, { flex: 1 }]} />
               <TouchableOpacity testID="add-game-btn" onPress={() => addGame()} style={styles.addBtn}>
-                <Plus size={20} color={colors.neonBlue} />
+                <Plus size={20} color={colors.primary} />
               </TouchableOpacity>
             </View>
             <View style={[styles.wrap, { marginTop: 8 }]}>
@@ -184,7 +175,7 @@ export default function Signup() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   back: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
@@ -194,18 +185,18 @@ const styles = StyleSheet.create({
   label: { color: colors.textSecondary, fontSize: 12, fontWeight: "600", letterSpacing: 0.5, textTransform: "uppercase" },
   input: { backgroundColor: colors.surface, color: colors.textPrimary, padding: 14, borderRadius: radius.md, fontSize: 16, borderWidth: 1, borderColor: colors.border },
   chip: { backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, flexShrink: 0 },
-  chipActive: { backgroundColor: colors.purpleSoft, borderColor: colors.purple },
+  chipActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   chipText: { color: colors.textSecondary, fontSize: 13, fontWeight: "600" },
-  chipTextActive: { color: colors.textPrimary },
+  chipTextActive: { color: colors.primary },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  addBtn: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.neonBlueSoft, borderWidth: 1, borderColor: "rgba(0,229,255,0.3)", alignItems: "center", justifyContent: "center" },
+  addBtn: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   suggestChip: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.borderStrong, borderStyle: "dashed", paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill },
   suggestChipText: { color: colors.textSecondary, fontSize: 12, fontWeight: "600" },
   gameRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surface, padding: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   gameName: { color: colors.textPrimary, fontSize: 14, fontWeight: "600", flex: 1 },
-  gameHours: { color: colors.neonBlue, fontSize: 13, fontWeight: "700" },
-  primary: { backgroundColor: colors.purple, padding: 16, borderRadius: radius.pill, alignItems: "center", marginTop: spacing.sm },
-  primaryText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  linkText: { color: colors.neonBlue, textAlign: "center", marginTop: spacing.md },
+  gameHours: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  primary: { backgroundColor: colors.primary, padding: 16, borderRadius: radius.pill, alignItems: "center", marginTop: spacing.sm },
+  primaryText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  linkText: { color: colors.primary, textAlign: "center", marginTop: spacing.md, fontWeight: "600" },
   err: { color: colors.danger, fontSize: 13 },
 });

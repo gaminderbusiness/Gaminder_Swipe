@@ -1,13 +1,15 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Heart } from "lucide-react-native";
-import { colors, radius, spacing, activityLabel, statusColor } from "@/src/lib/theme";
+import { useTheme, radius, spacing, activityLabel, statusColorFn, type ColorPalette } from "@/src/lib/theme";
 import { api } from "@/src/lib/api";
 
 export default function Matches() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,7 +32,7 @@ export default function Matches() {
       </View>
 
       {loading ? (
-        <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.neonBlue} /></View>
+        <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.primary} /></View>
       ) : matches.length === 0 ? (
         <View style={styles.empty} testID="matches-empty">
           <Heart size={48} color={colors.textMuted} />
@@ -45,7 +47,7 @@ export default function Matches() {
           data={matches}
           keyExtractor={(m) => m.match_id}
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.sm }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.neonBlue} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
           renderItem={({ item }) => (
             <TouchableOpacity
               testID={`match-${item.user.username}`}
@@ -54,12 +56,12 @@ export default function Matches() {
             >
               <View>
                 <Image source={{ uri: item.user.profile_photo }} style={styles.avatar} />
-                <View style={[styles.statusDot, { backgroundColor: statusColor(item.user.activity_status), borderColor: colors.surface }]} />
+                <View style={[styles.statusDot, { backgroundColor: statusColorFn(item.user.activity_status, colors), borderColor: colors.surface }]} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{item.user.username}</Text>
                 <Text style={styles.preview} numberOfLines={1}>
-                  {item.last_message || `${activityLabel(item.user.activity_status, item.user.last_active)} — say hi!`}
+                  {item.last_message || `${activityLabel(item.user.activity_status, item.user.last_active)} \u2014 say hi!`}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -70,7 +72,7 @@ export default function Matches() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md },
   h1: { color: colors.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },
@@ -83,6 +85,6 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl, gap: 8 },
   emptyTitle: { color: colors.textPrimary, fontSize: 20, fontWeight: "700", marginTop: spacing.md },
   emptyText: { color: colors.textSecondary, textAlign: "center" },
-  cta: { marginTop: spacing.md, backgroundColor: colors.purple, paddingVertical: 12, paddingHorizontal: 28, borderRadius: radius.pill },
-  ctaText: { color: "#fff", fontWeight: "700" },
+  cta: { marginTop: spacing.md, backgroundColor: colors.primary, paddingVertical: 12, paddingHorizontal: 28, borderRadius: radius.pill },
+  ctaText: { color: "#FFFFFF", fontWeight: "700" },
 });

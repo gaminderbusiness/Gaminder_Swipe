@@ -2,14 +2,15 @@ import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { CheckCircle2, XCircle } from "lucide-react-native";
-import { colors, radius, spacing } from "@/src/lib/theme";
+import { useTheme, radius, spacing, type ColorPalette } from "@/src/lib/theme";
 
 export default function SteamLinked() {
   const params = useLocalSearchParams<{ status?: string; profile_private?: string }>();
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   useEffect(() => {
-    // Auto-navigate to profile after 2 seconds if opened directly
     const t = setTimeout(() => router.replace("/(tabs)/profile"), 2200);
     return () => clearTimeout(t);
   }, [router]);
@@ -17,7 +18,7 @@ export default function SteamLinked() {
   if (!params.status) {
     return (
       <View style={styles.root}>
-        <ActivityIndicator color={colors.neonBlue} />
+        <ActivityIndicator color={colors.primary} />
         <Text style={styles.text}>Linking Steam...</Text>
       </View>
     );
@@ -29,7 +30,7 @@ export default function SteamLinked() {
   return (
     <View style={styles.root} testID="steam-linked-screen">
       {success ? (
-        <CheckCircle2 size={64} color={colors.neonBlue} />
+        <CheckCircle2 size={64} color={colors.primary} />
       ) : (
         <XCircle size={64} color={colors.danger} />
       )}
@@ -47,7 +48,7 @@ export default function SteamLinked() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", padding: spacing.xl, gap: spacing.md },
   title: { color: colors.textPrimary, fontSize: 24, fontWeight: "800" },
   text: { color: colors.textSecondary, fontSize: 14, textAlign: "center", lineHeight: 20 },
