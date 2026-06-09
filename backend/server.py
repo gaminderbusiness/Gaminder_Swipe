@@ -363,13 +363,14 @@ async def swipe(body: SwipeBody, user: dict = Depends(get_current_user)):
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Quota checks
-    if body.action == "like":
-        if user.get("daily_likes_used", 0) >= 20:
-            raise HTTPException(status_code=429, detail="Daily like limit reached")
-    if body.action == "superlike":
-        if user.get("super_likes_remaining", 0) <= 0:
-            raise HTTPException(status_code=429, detail="No super likes remaining")
+    # Quota checks (admins bypass all limits)
+    if not user.get("is_admin"):
+        if body.action == "like":
+            if user.get("daily_likes_used", 0) >= 20:
+                raise HTTPException(status_code=429, detail="Daily like limit reached")
+        if body.action == "superlike":
+            if user.get("super_likes_remaining", 0) <= 0:
+                raise HTTPException(status_code=429, detail="No super likes remaining")
 
     # Record swipe (upsert to avoid duplicates)
     await db.swipes.update_one(
@@ -378,11 +379,12 @@ async def swipe(body: SwipeBody, user: dict = Depends(get_current_user)):
         upsert=True,
     )
 
-    # Decrement quota
-    if body.action == "like":
-        await db.users.update_one({"id": user["id"]}, {"$inc": {"daily_likes_used": 1}})
-    if body.action == "superlike":
-        await db.users.update_one({"id": user["id"]}, {"$inc": {"super_likes_remaining": -1}})
+    # Decrement quota (skip for admins)
+    if not user.get("is_admin"):
+        if body.action == "like":
+            await db.users.update_one({"id": user["id"]}, {"$inc": {"daily_likes_used": 1}})
+        if body.action == "superlike":
+            await db.users.update_one({"id": user["id"]}, {"$inc": {"super_likes_remaining": -1}})
 
     # Match check: did target swipe like/superlike on us?
     matched = False
@@ -611,12 +613,57 @@ async def seed_users():
 
 @app.on_event("startup")
 async def on_startup():
+    await seed_admin()
     await seed_users()
     # Preload Riot Data Dragon champion mapping (non-blocking on failure)
     try:
         await load_champion_mapping()
     except Exception:
         pass
+
+
+async def seed_admin():
+    """Ensure a primary admin account exists with full privileges."""
+    admin_email = "admin@gaminder.app"
+    existing = await db.users.find_one({"email": admin_email})
+    admin_password_hash = hash_password("Gaminder@2025!")
+    if existing:
+        # keep is_admin flag and refresh quota fields (idempotent)
+        await db.users.update_one(
+            {"email": admin_email},
+            {"$set": {
+                "is_admin": True,
+                "password_hash": admin_password_hash,
+                "daily_likes_used": 0,
+                "super_likes_remaining": 99,
+            }},
+        )
+        return
+    uid = str(uuid.uuid4())
+    await db.users.insert_one({
+        "id": uid,
+        "email": admin_email,
+        "password_hash": admin_password_hash,
+        "username": "Admin",
+        "age": 28,
+        "country": "Turkey",
+        "languages": ["English", "Turkish"],
+        "bio": "Gaminder admin \u2014 has full access for testing and moderation.",
+        "profile_photo": "https://api.dicebear.com/7.x/adventurer/png?seed=admin&backgroundColor=ff6a1a",
+        "top_games": [
+            {"name": "Valorant", "hours": 0},
+            {"name": "League of Legends", "hours": 0},
+            {"name": "CS2", "hours": 0},
+        ],
+        "last_active": now().isoformat(),
+        "daily_likes_used": 0,
+        "super_likes_remaining": 99,
+        "like_reset_at": (now() + timedelta(hours=24)).isoformat(),
+        "super_like_reset_at": (now() + timedelta(days=365)).isoformat(),
+        "is_admin": True,
+        "is_seed": False,
+        "created_at": now().isoformat(),
+    })
 
 
 # ============================================================================

@@ -36,20 +36,20 @@ export default function Welcome() {
 
         <View style={styles.actions}>
           <TouchableOpacity
-            testID="signup-cta"
+            testID="login-cta"
             style={styles.primaryBtn}
-            onPress={() => router.push("/auth/signup")}
+            onPress={() => router.push("/auth/login")}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryText}>Create Account</Text>
+            <Text style={styles.primaryText}>Sign In</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            testID="login-cta"
+            testID="signup-cta"
             style={styles.secondaryBtn}
-            onPress={() => router.push("/auth/login")}
+            onPress={() => router.push("/auth/signup")}
             activeOpacity={0.8}
           >
-            <Text style={styles.secondaryText}>I already have an account</Text>
+            <Text style={styles.secondaryText}>Create New Account</Text>
           </TouchableOpacity>
           <Text style={styles.legal} testID="legal-text">
             By continuing, you agree to find gaming friends, not dates.
