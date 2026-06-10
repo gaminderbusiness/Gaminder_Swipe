@@ -942,15 +942,17 @@ async def seed_admin():
     admin_password_hash = hash_password("Gaminder@2025!")
     if existing:
         # keep is_admin flag and refresh quota fields (idempotent)
-        await db.users.update_one(
-            {"email": admin_email},
-            {"$set": {
-                "is_admin": True,
-                "password_hash": admin_password_hash,
-                "daily_likes_used": 0,
-                "super_likes_remaining": 99,
-            }},
-        )
+        patch = {
+            "is_admin": True,
+            "password_hash": admin_password_hash,
+            "daily_likes_used": 0,
+            "super_likes_remaining": 99,
+        }
+        if not existing.get("recently_played_games"):
+            patch["recently_played_games"] = ["Valorant", "League of Legends", "CS2"]
+        if not existing.get("playtime_slots"):
+            patch["playtime_slots"] = ["18:00-21:00", "21:00-00:00"]
+        await db.users.update_one({"email": admin_email}, {"$set": patch})
         return
     uid = str(uuid.uuid4())
     await db.users.insert_one({

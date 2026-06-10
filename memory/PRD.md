@@ -44,3 +44,8 @@ Premium subs, voice/video chat, forums, file sharing, Xbox/PlayStation integrati
 - GET `/standout`
 - GET `/matches`
 - GET `/messages/{match_id}`, POST `/messages/{match_id}`
+
+## Fork Verification (2026-06-10)
+- Backend was STOPPED post-fork; restarted → RUNNING. Frontend healthy on forked URL.
+- **Fixed critical Standout regression:** seed users + admin lacked `recently_played_games` / `playtime_slots` (heavily weighted by `compatibility_v2`), causing `/api/standout` to return empty for all users. `seed_users()` + `seed_admin()` now populate & backfill these fields on startup.
+- Verified: Standout returns profiles (seed ~80/55%, admin 70%), swipe feed returns cards, 14/14 backend pytest pass, full UI regression green (login, swipe, matches, chat, profile, Linked Accounts, theme toggle).
