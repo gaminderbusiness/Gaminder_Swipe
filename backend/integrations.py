@@ -104,6 +104,61 @@ async def fetch_steam_profile_and_games(steam_id: str) -> Tuple[Dict[str, Any], 
     return profile_data, top_games, profile_private
 
 
+async def fetch_steam_current_game(steam_id: str) -> Optional[Dict[str, Any]]:
+    """Return {appid, name} if user is CURRENTLY playing a game on Steam, else None.
+
+    Uses GetPlayerSummaries which returns gameid (appid string) and gameextrainfo
+    (human game name) when the player is in-game.
+    """
+    key = _steam_key()
+    if not key:
+        return None
+    try:
+        async with httpx.AsyncClient(base_url=STEAM_API_BASE, timeout=8.0) as client:
+            r = await client.get(
+                "/ISteamUser/GetPlayerSummaries/v2/",
+                params={"key": key, "steamids": steam_id},
+            )
+            r.raise_for_status()
+            players = r.json().get("response", {}).get("players", [])
+            if not players:
+                return None
+            p = players[0]
+            game_id = p.get("gameid")
+            game_name = p.get("gameextrainfo")
+            if game_id and game_name:
+                return {"appid": int(game_id) if str(game_id).isdigit() else game_id, "name": game_name}
+    except Exception:
+        return None
+    return None
+
+
+async def fetch_steam_recent_games(steam_id: str) -> List[Dict[str, Any]]:
+    """Returns recently played games (last 2 weeks). Each item: {appid, name, playtime_2weeks_min, playtime_forever_min}."""
+    key = _steam_key()
+    if not key:
+        return []
+    try:
+        async with httpx.AsyncClient(base_url=STEAM_API_BASE, timeout=8.0) as client:
+            r = await client.get(
+                "/IPlayerService/GetRecentlyPlayedGames/v1/",
+                params={"key": key, "steamid": steam_id, "count": 5},
+            )
+            r.raise_for_status()
+            games = r.json().get("response", {}).get("games", [])
+            return [
+                {
+                    "appid": g.get("appid"),
+                    "name": g.get("name") or f"App {g.get('appid')}",
+                    "playtime_2weeks_min": g.get("playtime_2weeks", 0),
+                    "playtime_forever_min": g.get("playtime_forever", 0),
+                }
+                for g in games
+            ]
+    except Exception:
+        return []
+
+
 # ============================================================================
 # Riot
 # ============================================================================

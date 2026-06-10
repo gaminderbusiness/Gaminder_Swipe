@@ -46,6 +46,17 @@ def iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat()
 
 
+# ---------- Constants ----------
+PLAYTIME_SLOTS = [
+    "00:00-03:00", "03:00-06:00", "06:00-09:00", "09:00-12:00",
+    "12:00-15:00", "15:00-18:00", "18:00-21:00", "21:00-00:00",
+]
+INACTIVE_THRESHOLD = timedelta(days=7)
+STEAM_CURRENT_GAME_TTL = timedelta(seconds=60)
+MIN_COMPAT_TO_SHOW = 50
+RIOT_RANK_TIERS = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"]
+
+
 # ---------- Models ----------
 class Game(BaseModel):
     name: str
@@ -57,14 +68,22 @@ class UserPublic(BaseModel):
     username: str
     age: int
     country: str
+    city: Optional[str] = None
     languages: List[str]
     bio: str
     profile_photo: str
     steam_avatar: Optional[str] = None
     steam_profile_url: Optional[str] = None
     top_games: List[Game] = []
+    recently_played_games: List[str] = []
+    playtime_slots: List[str] = []
+    current_game: Optional[str] = None
+    most_recent_game: Optional[str] = None
+    most_recent_game_at: Optional[str] = None
+    steam_total_hours: int = 0
     last_active: Optional[str] = None
     activity_status: Literal["online", "away", "offline"] = "offline"
+    is_inactive: bool = False
 
 
 class UserMe(UserPublic):
@@ -73,6 +92,8 @@ class UserMe(UserPublic):
     super_likes_remaining: int = 1
     like_reset_at: Optional[str] = None
     super_like_reset_at: Optional[str] = None
+    standout_boost_until: Optional[str] = None
+    is_admin: bool = False
 
 
 class SignupBody(BaseModel):
@@ -81,10 +102,13 @@ class SignupBody(BaseModel):
     username: str
     age: int
     country: str
+    city: Optional[str] = ""
     languages: List[str]
     bio: str = ""
     profile_photo: str = ""
     top_games: List[Game] = []
+    recently_played_games: List[str] = []
+    playtime_slots: List[str] = []
 
 
 class LoginBody(BaseModel):
@@ -96,10 +120,13 @@ class UpdateProfileBody(BaseModel):
     username: Optional[str] = None
     age: Optional[int] = None
     country: Optional[str] = None
+    city: Optional[str] = None
     languages: Optional[List[str]] = None
     bio: Optional[str] = None
     profile_photo: Optional[str] = None
     top_games: Optional[List[Game]] = None
+    recently_played_games: Optional[List[str]] = None
+    playtime_slots: Optional[List[str]] = None
 
 
 class SwipeBody(BaseModel):
@@ -161,11 +188,13 @@ def compute_activity(last_active_iso: Optional[str]) -> str:
 
 def public_user(u: dict) -> dict:
     last = u.get("last_active")
+    is_inactive = bool(u.get("inactive_at")) and not _is_active_recently(last)
     return {
         "id": u["id"],
         "username": u["username"],
         "age": u["age"],
         "country": u["country"],
+        "city": u.get("city"),
         "languages": u.get("languages", []),
         "bio": u.get("bio", ""),
         "profile_photo": u.get("profile_photo", ""),
@@ -174,12 +203,28 @@ def public_user(u: dict) -> dict:
         "steam_persona_name": u.get("steam_persona_name"),
         "steam_linked": bool(u.get("steam_id")),
         "top_games": u.get("top_games", []),
+        "recently_played_games": u.get("recently_played_games", []),
+        "playtime_slots": u.get("playtime_slots", []),
+        "current_game": (u.get("current_steam_game") or {}).get("name") if u.get("current_steam_game") else None,
+        "most_recent_game": u.get("most_recent_game"),
+        "most_recent_game_at": u.get("most_recent_game_at"),
+        "steam_total_hours": int(u.get("steam_total_hours", 0)),
         "riot_id": u.get("riot_id"),
         "riot_platform": u.get("riot_platform"),
         "lol_profile": u.get("lol_profile"),
         "last_active": last,
         "activity_status": compute_activity(last),
+        "is_inactive": is_inactive,
     }
+
+
+def _is_active_recently(last_iso: Optional[str]) -> bool:
+    if not last_iso:
+        return False
+    try:
+        return (now() - datetime.fromisoformat(last_iso)) < INACTIVE_THRESHOLD
+    except Exception:
+        return False
 
 
 def me_user(u: dict) -> dict:
@@ -190,6 +235,8 @@ def me_user(u: dict) -> dict:
         "super_likes_remaining": u.get("super_likes_remaining", 1),
         "like_reset_at": u.get("like_reset_at"),
         "super_like_reset_at": u.get("super_like_reset_at"),
+        "standout_boost_until": u.get("standout_boost_until"),
+        "is_admin": bool(u.get("is_admin", False)),
     })
     return base
 
@@ -228,37 +275,206 @@ async def refresh_quotas(user: dict) -> dict:
     return user
 
 
-# ---------- Compatibility scoring ----------
+# ---------- Compatibility scoring (v2 - spec compliant) ----------
+def _ci_set(items: List[str]) -> set:
+    return {s.strip().lower() for s in items if s}
+
+
+def _rank_tier(rank: Optional[dict]) -> Optional[str]:
+    if not rank:
+        return None
+    return (rank.get("tier") or "").upper() or None
+
+
+def _tier_similar(t1: Optional[str], t2: Optional[str]) -> bool:
+    """Per user spec: 'Gold Plat vs yeterli' - same tier OR ±1 tier counts."""
+    if not t1 or not t2:
+        return False
+    try:
+        i1 = RIOT_RANK_TIERS.index(t1)
+        i2 = RIOT_RANK_TIERS.index(t2)
+        return abs(i1 - i2) <= 1
+    except ValueError:
+        return t1 == t2
+
+
+def compatibility_v2(a: dict, b: dict) -> dict:
+    """Returns {score: 0-100, breakdown: {...}, shared_games: [...]}.
+
+    Weights (per spec):
+      Recently Played Games: 70% (1=40, 2=60, 3=70)
+      Steam Library (top5):  15% (3+=15, 2=10, 1=5)
+      Riot Bonus:             5% (same LoL game + similar rank)
+      Schedule Overlap:      10% (any overlap)
+    """
+    a_recent = _ci_set(a.get("recently_played_games", []))
+    b_recent = _ci_set(b.get("recently_played_games", []))
+    recent_shared = a_recent & b_recent
+    recent_count = len(recent_shared)
+    if recent_count >= 3:
+        recent_pts = 70
+    elif recent_count == 2:
+        recent_pts = 60
+    elif recent_count == 1:
+        recent_pts = 40
+    else:
+        recent_pts = 0
+
+    a_top5 = _ci_set([g.get("name", "") for g in (a.get("top_games", []) or [])[:5]])
+    b_top5 = _ci_set([g.get("name", "") for g in (b.get("top_games", []) or [])[:5]])
+    top5_shared = a_top5 & b_top5
+    top5_count = len(top5_shared)
+    if top5_count >= 3:
+        top5_pts = 15
+    elif top5_count == 2:
+        top5_pts = 10
+    elif top5_count == 1:
+        top5_pts = 5
+    else:
+        top5_pts = 0
+
+    riot_pts = 0
+    a_lol = a.get("lol_profile") or {}
+    b_lol = b.get("lol_profile") or {}
+    if a.get("riot_id") and b.get("riot_id"):
+        a_tier = _rank_tier(a_lol.get("solo_rank")) or _rank_tier(a_lol.get("flex_rank"))
+        b_tier = _rank_tier(b_lol.get("solo_rank")) or _rank_tier(b_lol.get("flex_rank"))
+        if _tier_similar(a_tier, b_tier):
+            riot_pts = 5
+
+    a_slots = set(a.get("playtime_slots", []) or [])
+    b_slots = set(b.get("playtime_slots", []) or [])
+    schedule_pts = 10 if (a_slots & b_slots) else 0
+
+    total = recent_pts + top5_pts + riot_pts + schedule_pts
+    # Shared games for UI: combine recent + top5 (case-preserved)
+    a_recent_orig = a.get("recently_played_games", []) or []
+    b_recent_orig = set(g.lower() for g in (b.get("recently_played_games", []) or []))
+    shared_display = [g for g in a_recent_orig if g.lower() in b_recent_orig]
+    if not shared_display:
+        a_top5_orig = [g.get("name", "") for g in (a.get("top_games", []) or [])[:5]]
+        b_top5_orig = set(g.get("name", "").lower() for g in (b.get("top_games", []) or [])[:5])
+        shared_display = [n for n in a_top5_orig if n and n.lower() in b_top5_orig]
+
+    return {
+        "score": min(100, max(0, total)),
+        "breakdown": {
+            "recently_played": recent_pts,
+            "steam_library": top5_pts,
+            "riot_bonus": riot_pts,
+            "schedule": schedule_pts,
+        },
+        "shared_games": shared_display[:5],
+    }
+
+
+def priority_score(u: dict, viewer_recent: set, viewer_top5: set) -> int:
+    """Lower = higher priority for sorting.
+    0: currently playing the SAME game (in viewer's recent)
+    1: currently playing any game
+    2: most recent game matches viewer's recent (and recent within 24h)
+    3: active within last 5min
+    4: active within last 3h
+    5: active within 24h
+    6: active within 7 days
+    7: inactive
+    """
+    cur = (u.get("current_steam_game") or {}).get("name") or ""
+    if cur:
+        if cur.lower() in viewer_recent or cur.lower() in viewer_top5:
+            return 0
+        return 1
+    mrg = (u.get("most_recent_game") or "").lower()
+    mrg_at = u.get("most_recent_game_at")
+    if mrg and mrg_at:
+        try:
+            if (now() - datetime.fromisoformat(mrg_at)) < timedelta(hours=24):
+                if mrg in viewer_recent or mrg in viewer_top5:
+                    return 2
+        except Exception:
+            pass
+    last = u.get("last_active")
+    if last:
+        try:
+            delta = now() - datetime.fromisoformat(last)
+            if delta < timedelta(minutes=5):
+                return 3
+            if delta < timedelta(hours=3):
+                return 4
+            if delta < timedelta(hours=24):
+                return 5
+            if delta < INACTIVE_THRESHOLD:
+                return 6
+        except Exception:
+            pass
+    return 7
+
+
+# ---------- Steam current game refresh (60s TTL) ----------
+async def refresh_steam_current_game(user: dict, force: bool = False) -> dict:
+    """Refresh Steam current game with 60s cache. Updates user doc in-place."""
+    steam_id = user.get("steam_id")
+    if not steam_id:
+        return user
+    last_check = user.get("current_steam_game_updated_at")
+    if not force and last_check:
+        try:
+            if (now() - datetime.fromisoformat(last_check)) < STEAM_CURRENT_GAME_TTL:
+                return user
+        except Exception:
+            pass
+    # Seeded users (or any without real Steam linking) can be marked do_not_refresh
+    if user.get("steam_seeded"):
+        # don't hit Steam API for fake seeds
+        return user
+    try:
+        current = await fetch_steam_current_game(steam_id)
+    except Exception:
+        current = None
+    updates = {"current_steam_game_updated_at": now().isoformat()}
+    if current:
+        updates["current_steam_game"] = current
+        updates["most_recent_game"] = current.get("name")
+        updates["most_recent_game_at"] = now().isoformat()
+    else:
+        updates["current_steam_game"] = None
+    await db.users.update_one({"id": user["id"]}, {"$set": updates})
+    user.update(updates)
+    return user
+
+
+# ---------- Inactive status & return bonus ----------
+async def check_inactive_status(user: dict) -> dict:
+    """Mark user inactive if last_active > 7 days. On return, grant bonus (once)."""
+    last = user.get("last_active")
+    if not last:
+        return user
+    try:
+        delta = now() - datetime.fromisoformat(last)
+    except Exception:
+        return user
+    was_inactive = bool(user.get("inactive_at"))
+    is_currently_inactive = delta > INACTIVE_THRESHOLD
+    updates = {}
+    if is_currently_inactive and not was_inactive:
+        updates["inactive_at"] = now().isoformat()
+    elif not is_currently_inactive and was_inactive:
+        # Return from inactive
+        updates["inactive_at"] = None
+        if not user.get("inactive_return_bonus_used"):
+            updates["super_likes_remaining"] = (user.get("super_likes_remaining", 0) or 0) + 1
+            updates["standout_boost_until"] = (now() + timedelta(hours=1)).isoformat()
+            updates["inactive_return_bonus_used"] = True
+    if updates:
+        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        user.update(updates)
+    return user
+
+
+# ---------- Compatibility scoring (v1 - legacy, kept for backward compat) ----------
 def compatibility(a: dict, b: dict) -> dict:
-    a_games = {g["name"]: g["hours"] for g in a.get("top_games", [])}
-    b_games = {g["name"]: g["hours"] for g in b.get("top_games", [])}
-    shared = list(set(a_games.keys()) & set(b_games.keys()))
-
-    # Shared games (max 50)
-    game_score = min(50, len(shared) * 18)
-    # Playtime similarity (max 20)
-    pt_score = 0
-    if shared:
-        diffs = []
-        for g in shared:
-            ah = a_games[g]
-            bh = b_games[g]
-            denom = max(ah, bh, 1)
-            diffs.append(1 - abs(ah - bh) / denom)
-        pt_score = int(20 * (sum(diffs) / len(diffs)))
-    # Country (max 15)
-    country_score = 15 if a.get("country") and a.get("country") == b.get("country") else 0
-    # Language (max 15)
-    common_langs = set(a.get("languages", [])) & set(b.get("languages", []))
-    lang_score = 15 if common_langs else 0
-
-    base = game_score + pt_score + country_score + lang_score
-    # Add a small deterministic boost so cards aren't all 0% if no overlap
-    if base < 30:
-        # seed boost from id hash
-        boost = (abs(hash(a["id"] + b["id"])) % 25) + 10
-        base = max(base, boost)
-    return {"score": min(99, max(1, base)), "shared_games": shared}
+    """Legacy v1 - now delegates to v2 for consistency."""
+    return compatibility_v2(a, b)
 
 
 # ---------- Routes ----------
