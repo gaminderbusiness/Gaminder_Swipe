@@ -496,12 +496,16 @@ async def signup(body: SignupBody):
         "username": body.username,
         "age": body.age,
         "country": body.country,
+        "city": body.city or "",
         "languages": body.languages,
         "bio": body.bio,
-        "profile_photo": body.profile_photo or f"https://api.dicebear.com/7.x/adventurer/png?seed={body.username}",
-        "steam_avatar": body.profile_photo or None,
-        "steam_profile_url": f"https://steamcommunity.com/id/{body.username.lower()}",
+        "profile_photo": body.profile_photo or f"https://api.dicebear.com/7.x/adventurer/png?seed={body.username}&backgroundColor=ff6a1a",
+        "steam_avatar": None,
+        "steam_profile_url": None,
         "top_games": [g.dict() for g in body.top_games],
+        "recently_played_games": (body.recently_played_games or [])[:3],
+        "playtime_slots": [s for s in (body.playtime_slots or []) if s in PLAYTIME_SLOTS][:2],
+        "steam_total_hours": sum(int(g.hours) for g in body.top_games),
         "last_active": now().isoformat(),
         "daily_likes_used": 0,
         "super_likes_remaining": 1,
@@ -531,6 +535,8 @@ async def login(body: LoginBody):
 @api_router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)):
     user = await refresh_quotas(user)
+    user = await check_inactive_status(user)
+    user = await refresh_steam_current_game(user)
     return me_user(user)
 
 
@@ -539,6 +545,11 @@ async def update_profile(body: UpdateProfileBody, user: dict = Depends(get_curre
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if "top_games" in updates:
         updates["top_games"] = [g if isinstance(g, dict) else g.dict() for g in updates["top_games"]]
+        updates["steam_total_hours"] = sum(int(g.get("hours", 0)) for g in updates["top_games"])
+    if "recently_played_games" in updates:
+        updates["recently_played_games"] = list(updates["recently_played_games"])[:3]
+    if "playtime_slots" in updates:
+        updates["playtime_slots"] = [s for s in updates["playtime_slots"] if s in PLAYTIME_SLOTS][:2]
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
         user.update(updates)
@@ -548,25 +559,61 @@ async def update_profile(body: UpdateProfileBody, user: dict = Depends(get_curre
 @api_router.get("/swipe/feed")
 async def swipe_feed(user: dict = Depends(get_current_user)):
     user = await refresh_quotas(user)
+    user = await check_inactive_status(user)
+    user = await refresh_steam_current_game(user)
     swiped = await db.swipes.find({"user_id": user["id"]}, {"_id": 0, "target_user_id": 1}).to_list(10000)
     swiped_ids = {s["target_user_id"] for s in swiped}
     swiped_ids.add(user["id"])
-    others = await db.users.find({"id": {"$nin": list(swiped_ids)}}, {"_id": 0, "password_hash": 0}).to_list(200)
-    cards = []
+    others = await db.users.find({
+        "id": {"$nin": list(swiped_ids)},
+        "is_banned": {"$ne": True},
+    }, {"_id": 0, "password_hash": 0}).to_list(500)
+
+    viewer_recent = _ci_set(user.get("recently_played_games", []))
+    viewer_top5 = _ci_set([g.get("name", "") for g in (user.get("top_games", []) or [])[:5]])
+
+    enriched = []
+    inactive_pool = []
     for o in others:
-        comp = compatibility(user, o)
+        comp = compatibility_v2(user, o)
         p = public_user(o)
         p["match_percentage"] = comp["score"]
         p["shared_games"] = comp["shared_games"]
-        cards.append(p)
-    cards.sort(key=lambda c: c["match_percentage"], reverse=True)
+        p["compat_breakdown"] = comp["breakdown"]
+        prio = priority_score(o, viewer_recent, viewer_top5)
+        p["_prio"] = prio
+        if prio >= 7 or p.get("is_inactive"):
+            inactive_pool.append(p)
+        else:
+            enriched.append(p)
+
+    # 50% filter: keep only >=50% if we have enough; otherwise relax
+    above_50 = [c for c in enriched if c["match_percentage"] >= MIN_COMPAT_TO_SHOW]
+    if len(above_50) >= 10:
+        primary = above_50
+    else:
+        primary = enriched  # relax filter when pool is thin
+
+    # Sort: priority asc (0=playing-same-game first) then match_percentage desc
+    primary.sort(key=lambda c: (c["_prio"], -c["match_percentage"]))
+
+    # If still nothing, append inactive pool at bottom
+    if not primary:
+        inactive_pool.sort(key=lambda c: -c["match_percentage"])
+        primary = inactive_pool[:30]
+
+    # Strip internal fields
+    for c in primary:
+        c.pop("_prio", None)
+
     return {
-        "cards": cards,
+        "cards": primary,
         "daily_likes_used": user.get("daily_likes_used", 0),
         "daily_likes_limit": 20,
         "super_likes_remaining": user.get("super_likes_remaining", 0),
         "like_reset_at": user.get("like_reset_at"),
         "super_like_reset_at": user.get("super_like_reset_at"),
+        "is_admin": bool(user.get("is_admin", False)),
     }
 
 
@@ -636,19 +683,40 @@ async def swipe(body: SwipeBody, user: dict = Depends(get_current_user)):
 
 @api_router.get("/standout")
 async def standout(user: dict = Depends(get_current_user)):
+    user = await refresh_steam_current_game(user)
     swiped = await db.swipes.find({"user_id": user["id"]}, {"_id": 0, "target_user_id": 1}).to_list(10000)
     swiped_ids = {s["target_user_id"] for s in swiped}
     swiped_ids.add(user["id"])
-    others = await db.users.find({"id": {"$nin": list(swiped_ids)}}, {"_id": 0, "password_hash": 0}).to_list(200)
+    others = await db.users.find({
+        "id": {"$nin": list(swiped_ids)},
+        "is_banned": {"$ne": True},
+    }, {"_id": 0, "password_hash": 0}).to_list(500)
     enriched = []
+    viewer_recent = _ci_set(user.get("recently_played_games", []))
+    viewer_top5 = _ci_set([g.get("name", "") for g in (user.get("top_games", []) or [])[:5]])
     for o in others:
-        comp = compatibility(user, o)
+        comp = compatibility_v2(user, o)
+        if comp["score"] < MIN_COMPAT_TO_SHOW:
+            continue
         p = public_user(o)
         p["match_percentage"] = comp["score"]
         p["shared_games"] = comp["shared_games"]
+        p["compat_breakdown"] = comp["breakdown"]
+        # Apply 1h Standout Boost if other user has it
+        boost_until = o.get("standout_boost_until")
+        boost_active = False
+        if boost_until:
+            try:
+                boost_active = now() < datetime.fromisoformat(boost_until)
+            except Exception:
+                boost_active = False
+        p["boost_active"] = boost_active
+        p["_prio"] = priority_score(o, viewer_recent, viewer_top5)
         enriched.append(p)
-    # Top by match%, then by activity
-    enriched.sort(key=lambda c: (c["match_percentage"], 0 if c["activity_status"] == "online" else 1), reverse=True)
+    # Sort: boost first, then by priority, then by score desc
+    enriched.sort(key=lambda c: (0 if c["boost_active"] else 1, c["_prio"], -c["match_percentage"]))
+    for c in enriched:
+        c.pop("_prio", None)
     return {"profiles": enriched[:10]}
 
 

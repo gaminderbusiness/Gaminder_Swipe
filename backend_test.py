@@ -9,7 +9,7 @@ import time
 from typing import Dict, Optional
 
 # Backend URL from frontend/.env
-BASE_URL = "https://16483a81-4145-40c7-b306-2f8bae3847a6.preview.emergentagent.com/api"
+BASE_URL = "https://active-gamers-2.preview.emergentagent.com/api"
 
 # Test credentials from test_credentials.md
 SEED_USER_EMAIL = "novastrike@seed.gamingbuddy.app"
