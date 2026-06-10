@@ -42,6 +42,7 @@ export const api = {
   signup: (data: any) => request("/auth/signup", { method: "POST", body: JSON.stringify(data) }),
   login: (data: any) => request("/auth/login", { method: "POST", body: JSON.stringify(data) }),
   me: () => request("/auth/me"),
+  homeActivity: () => request("/home/activity"),
   updateProfile: (data: any) => request("/profile/me", { method: "PUT", body: JSON.stringify(data) }),
   swipeFeed: () => request("/swipe/feed"),
   swipe: (target_user_id: string, action: "like" | "pass" | "superlike") =>

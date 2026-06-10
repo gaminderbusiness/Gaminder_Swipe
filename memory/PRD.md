@@ -49,3 +49,9 @@ Premium subs, voice/video chat, forums, file sharing, Xbox/PlayStation integrati
 - Backend was STOPPED post-fork; restarted → RUNNING. Frontend healthy on forked URL.
 - **Fixed critical Standout regression:** seed users + admin lacked `recently_played_games` / `playtime_slots` (heavily weighted by `compatibility_v2`), causing `/api/standout` to return empty for all users. `seed_users()` + `seed_admin()` now populate & backfill these fields on startup.
 - Verified: Standout returns profiles (seed ~80/55%, admin 70%), swipe feed returns cards, 14/14 backend pytest pass, full UI regression green (login, swipe, matches, chat, profile, Linked Accounts, theme toggle).
+
+## v1.5 Phase 1 — Onboarding & Profile (DONE, 2026-06-10)
+- Signup now collects City + Recently Played Games (max 3, required) + Gaming Schedule (2h slots, max 2, required).
+- Added `onboarding_complete` flag: false for new signups, true for seed/admin. RootNav gates the app behind it.
+- New mandatory `/onboarding/connect-steam` screen: public-profile notice + Help(?) icon → placeholder tutorial-GIF modal + Connect Steam (OpenID). Steam callback sets onboarding_complete=true.
+- Verified 18/18 backend pytest + frontend gate/regression. NOTE: real Steam OpenID can't be automated; seed/admin bypass gate for testing.

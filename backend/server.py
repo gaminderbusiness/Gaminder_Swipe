@@ -722,6 +722,49 @@ async def standout(user: dict = Depends(get_current_user)):
     return {"profiles": enriched[:10]}
 
 
+@api_router.get("/home/activity")
+async def home_activity(user: dict = Depends(get_current_user)):
+    """Live game-activity card data for the Home screen + auto-matchmaking."""
+    user = await refresh_steam_current_game(user)
+    cur = (user.get("current_steam_game") or {}).get("name")
+    last_game = user.get("most_recent_game")
+    last_game_at = user.get("most_recent_game_at")
+    recent = user.get("recently_played_games", []) or []
+    top = [g.get("name") for g in (user.get("top_games") or []) if g.get("name")]
+    focus = cur or last_game or (recent[0] if recent else (top[0] if top else None))
+    focus_l = (focus or "").lower()
+
+    swiped = await db.swipes.find({"user_id": user["id"]}, {"_id": 0, "target_user_id": 1}).to_list(10000)
+    swiped_ids = {s["target_user_id"] for s in swiped}
+    swiped_ids.add(user["id"])
+    others = await db.users.find({
+        "id": {"$nin": list(swiped_ids)},
+        "is_banned": {"$ne": True},
+    }, {"_id": 0, "password_hash": 0}).to_list(1000)
+
+    same_game_count = 0
+    pool = 0
+    for o in others:
+        pool += 1
+        if not focus_l:
+            continue
+        o_games = {g.lower() for g in (o.get("recently_played_games") or [])}
+        o_top = {(g.get("name") or "").lower() for g in (o.get("top_games") or [])}
+        o_cur = ((o.get("current_steam_game") or {}).get("name") or "").lower()
+        active = _is_active_recently(o.get("last_active"))
+        if (focus_l and focus_l == o_cur) or ((focus_l in o_games or focus_l in o_top) and active):
+            same_game_count += 1
+
+    return {
+        "focus_game": focus,
+        "is_playing_now": bool(cur),
+        "last_game": last_game,
+        "last_game_at": last_game_at,
+        "active_same_game_count": same_game_count,
+        "matchmaking_pool": pool,
+    }
+
+
 @api_router.get("/matches")
 async def list_matches(user: dict = Depends(get_current_user)):
     matches = await db.matches.find({
