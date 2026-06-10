@@ -859,13 +859,40 @@ SEED_USERS = [
 ]
 
 
+def _seed_recent_games(s: dict) -> List[str]:
+    """Top 2-3 game names act as the user's recently played games."""
+    names = [g.get("name", "") for g in s.get("games", []) if g.get("name")]
+    # deterministic 2 or 3 based on username
+    take = 3 if (hash(s["username"]) % 2 == 0) else 2
+    return names[:take]
+
+
+def _seed_playtime_slots(s: dict) -> List[str]:
+    """Assign 2 deterministic slots, biased toward evening for natural overlap."""
+    h = abs(hash("slot-" + s["username"]))
+    # Always include a common prime-time slot so seed users share schedules
+    evening = "18:00-21:00" if (h % 2 == 0) else "21:00-00:00"
+    second = PLAYTIME_SLOTS[h % len(PLAYTIME_SLOTS)]
+    slots = [evening]
+    if second != evening:
+        slots.append(second)
+    return slots
+
+
 async def seed_users():
-    count = await db.users.count_documents({"is_seed": True})
-    if count >= len(SEED_USERS):
-        return
     for s in SEED_USERS:
         existing = await db.users.find_one({"username": s["username"]})
+        recent = _seed_recent_games(s)
+        slots = _seed_playtime_slots(s)
         if existing:
+            # Backfill missing compatibility fields on previously seeded docs
+            patch = {}
+            if not existing.get("recently_played_games"):
+                patch["recently_played_games"] = recent
+            if not existing.get("playtime_slots"):
+                patch["playtime_slots"] = slots
+            if patch:
+                await db.users.update_one({"_id": existing["_id"]}, {"$set": patch})
             continue
         uid = str(uuid.uuid4())
         # Stagger last_active times for variety
@@ -884,6 +911,8 @@ async def seed_users():
             "steam_avatar": s["photo"],
             "steam_profile_url": f"https://steamcommunity.com/id/{s['username'].lower()}",
             "top_games": s["games"],
+            "recently_played_games": recent,
+            "playtime_slots": slots,
             "last_active": last_active,
             "daily_likes_used": 0,
             "super_likes_remaining": 1,
