@@ -237,6 +237,7 @@ def me_user(u: dict) -> dict:
         "super_like_reset_at": u.get("super_like_reset_at"),
         "standout_boost_until": u.get("standout_boost_until"),
         "is_admin": bool(u.get("is_admin", False)),
+        "onboarding_complete": bool(u.get("onboarding_complete", False)),
     })
     return base
 
@@ -511,6 +512,7 @@ async def signup(body: SignupBody):
         "super_likes_remaining": 1,
         "like_reset_at": (now() + timedelta(hours=24)).isoformat(),
         "super_like_reset_at": (now() + timedelta(days=7)).isoformat(),
+        "onboarding_complete": False,
         "created_at": now().isoformat(),
     }
     await db.users.insert_one(user_doc.copy())
@@ -891,6 +893,8 @@ async def seed_users():
                 patch["recently_played_games"] = recent
             if not existing.get("playtime_slots"):
                 patch["playtime_slots"] = slots
+            if not existing.get("onboarding_complete"):
+                patch["onboarding_complete"] = True
             if patch:
                 await db.users.update_one({"_id": existing["_id"]}, {"$set": patch})
             continue
@@ -913,6 +917,7 @@ async def seed_users():
             "top_games": s["games"],
             "recently_played_games": recent,
             "playtime_slots": slots,
+            "onboarding_complete": True,
             "last_active": last_active,
             "daily_likes_used": 0,
             "super_likes_remaining": 1,
@@ -952,6 +957,7 @@ async def seed_admin():
             patch["recently_played_games"] = ["Valorant", "League of Legends", "CS2"]
         if not existing.get("playtime_slots"):
             patch["playtime_slots"] = ["18:00-21:00", "21:00-00:00"]
+        patch["onboarding_complete"] = True
         await db.users.update_one({"email": admin_email}, {"$set": patch})
         return
     uid = str(uuid.uuid4())
@@ -977,6 +983,7 @@ async def seed_admin():
         "super_like_reset_at": (now() + timedelta(days=365)).isoformat(),
         "is_admin": True,
         "is_seed": False,
+        "onboarding_complete": True,
         "created_at": now().isoformat(),
     })
 
@@ -1032,6 +1039,7 @@ async def steam_callback(request: Request):
         "steam_persona_name": profile_data.get("personaname"),
         "steam_profile_private": profile_private,
         "steam_linked_at": now().isoformat(),
+        "onboarding_complete": True,
     }
     if top_games:
         # Replace top_games with Steam library

@@ -9,6 +9,7 @@ import { useAuth } from "@/src/lib/auth";
 const COUNTRIES = ["USA", "UK", "Canada", "Germany", "France", "Japan", "Brazil", "Australia", "India", "Sweden", "Mexico", "Netherlands", "South Korea", "Russia", "China", "Turkey", "Other"];
 const LANG_OPTIONS = ["English", "Spanish", "French", "German", "Portuguese", "Japanese", "Korean", "Mandarin", "Russian", "Italian", "Dutch", "Swedish", "Turkish"];
 const SUGGESTED_GAMES = ["Valorant", "CS2", "League of Legends", "Dota 2", "Apex Legends", "Fortnite", "Overwatch 2", "Rocket League", "Rust", "Minecraft", "Destiny 2", "Elden Ring", "Final Fantasy XIV", "World of Warcraft", "Genshin Impact"];
+const PLAYTIME_SLOTS = ["00:00-03:00", "03:00-06:00", "06:00-09:00", "09:00-12:00", "12:00-15:00", "15:00-18:00", "18:00-21:00", "21:00-00:00"];
 
 export default function Signup() {
   const router = useRouter();
@@ -21,8 +22,11 @@ export default function Signup() {
   const [username, setUsername] = useState("");
   const [age, setAge] = useState("");
   const [country, setCountry] = useState("USA");
+  const [city, setCity] = useState("");
   const [languages, setLanguages] = useState<string[]>(["English"]);
   const [bio, setBio] = useState("");
+  const [recentGames, setRecentGames] = useState<string[]>([]);
+  const [slots, setSlots] = useState<string[]>([]);
   const [games, setGames] = useState<{ name: string; hours: number }[]>([]);
   const [gameInput, setGameInput] = useState("");
   const [hoursInput, setHoursInput] = useState("");
@@ -31,6 +35,14 @@ export default function Signup() {
 
   const toggleLang = (l: string) => {
     setLanguages((cur) => cur.includes(l) ? cur.filter(x => x !== l) : [...cur, l]);
+  };
+
+  const toggleRecent = (g: string) => {
+    setRecentGames((cur) => cur.includes(g) ? cur.filter(x => x !== g) : (cur.length >= 3 ? cur : [...cur, g]));
+  };
+
+  const toggleSlot = (s: string) => {
+    setSlots((cur) => cur.includes(s) ? cur.filter(x => x !== s) : (cur.length >= 2 ? cur : [...cur, s]));
   };
 
   const addGame = (name?: string) => {
@@ -54,6 +66,12 @@ export default function Signup() {
     if (isNaN(ageN) || ageN < 13 || ageN > 99) {
       setErr("Enter a valid age (13-99)"); return;
     }
+    if (recentGames.length === 0) {
+      setErr("Pick at least 1 recently played game"); return;
+    }
+    if (slots.length === 0) {
+      setErr("Pick at least 1 gaming time slot"); return;
+    }
     setLoading(true);
     try {
       const photoSeed = encodeURIComponent(username);
@@ -63,10 +81,13 @@ export default function Signup() {
         username: username.trim(),
         age: ageN,
         country,
+        city: city.trim(),
         languages,
         bio,
         profile_photo: `https://api.dicebear.com/7.x/adventurer/png?seed=${photoSeed}&backgroundColor=ff6a1a`,
         top_games: games,
+        recently_played_games: recentGames,
+        playtime_slots: slots,
       });
     } catch (e: any) {
       setErr(e.message || "Signup failed");
@@ -113,6 +134,45 @@ export default function Signup() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>City</Text>
+            <TextInput testID="signup-city" value={city} onChangeText={setCity} placeholder="Los Angeles" placeholderTextColor={colors.textMuted} style={styles.input} />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Recently Played Games * (max 3)</Text>
+            <Text style={styles.helper}>What games have you been playing recently? These heavily affect your matches.</Text>
+            <View style={styles.wrap}>
+              {SUGGESTED_GAMES.map(g => {
+                const sel = recentGames.includes(g);
+                const disabled = !sel && recentGames.length >= 3;
+                return (
+                  <TouchableOpacity key={g} testID={`recent-${g}`} onPress={() => toggleRecent(g)} disabled={disabled} style={[styles.chip, sel && styles.chipActive, disabled && { opacity: 0.4 }]}>
+                    <Text style={[styles.chipText, sel && styles.chipTextActive]}>{g}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.counter}>{recentGames.length}/3 selected</Text>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Gaming Schedule * (max 2)</Text>
+            <Text style={styles.helper}>When do you usually play?</Text>
+            <View style={styles.wrap}>
+              {PLAYTIME_SLOTS.map(s => {
+                const sel = slots.includes(s);
+                const disabled = !sel && slots.length >= 2;
+                return (
+                  <TouchableOpacity key={s} testID={`slot-${s}`} onPress={() => toggleSlot(s)} disabled={disabled} style={[styles.chip, sel && styles.chipActive, disabled && { opacity: 0.4 }]}>
+                    <Text style={[styles.chipText, sel && styles.chipTextActive]}>{s}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.counter}>{slots.length}/2 selected</Text>
           </View>
 
           <View style={styles.field}>
@@ -183,6 +243,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   subtitle: { color: colors.textSecondary, fontSize: 15 },
   field: { gap: 6 },
   label: { color: colors.textSecondary, fontSize: 12, fontWeight: "600", letterSpacing: 0.5, textTransform: "uppercase" },
+  helper: { color: colors.textMuted, fontSize: 12, lineHeight: 16 },
+  counter: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginTop: 2 },
   input: { backgroundColor: colors.surface, color: colors.textPrimary, padding: 14, borderRadius: radius.md, fontSize: 16, borderWidth: 1, borderColor: colors.border },
   chip: { backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, flexShrink: 0 },
   chipActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },

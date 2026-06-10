@@ -25,14 +25,77 @@ def fresh_user(session):
     email = f"test_{uuid.uuid4().hex[:8]}@test.com"
     payload = {
         "email": email, "password": "Pass1234!", "username": f"tester_{uuid.uuid4().hex[:6]}",
-        "age": 25, "country": "USA", "languages": ["English"], "bio": "hi",
-        "profile_photo": "", "top_games": [{"name": "CS2", "hours": 100}]
+        "age": 25, "country": "USA", "city": "Los Angeles", "languages": ["English"], "bio": "hi",
+        "profile_photo": "", "top_games": [{"name": "CS2", "hours": 100}],
+        "recently_played_games": ["Valorant", "CS2"],
+        "playtime_slots": ["18:00-21:00", "21:00-00:00"],
     }
     r = session.post(f"{API}/auth/signup", json=payload, timeout=15)
     assert r.status_code == 200, r.text
     data = r.json()
     assert "token" in data and "user" in data
     return {"email": email, "token": data["token"], "user": data["user"]}
+
+
+# v1.5 Phase 1 - Onboarding & Profile
+def test_signup_persists_v15_fields_and_onboarding_false(session):
+    """Fresh signup with city/recently/playtime persists & onboarding_complete=False."""
+    email = f"v15_{uuid.uuid4().hex[:8]}@test.com"
+    payload = {
+        "email": email, "password": "Pass1234!", "username": f"v15_{uuid.uuid4().hex[:6]}",
+        "age": 24, "country": "Turkey", "city": "Istanbul",
+        "languages": ["Turkish", "English"], "bio": "",
+        "top_games": [{"name": "Valorant", "hours": 50}],
+        "recently_played_games": ["Valorant", "CS2", "Apex Legends"],
+        "playtime_slots": ["18:00-21:00", "21:00-00:00"],
+    }
+    r = session.post(f"{API}/auth/signup", json=payload, timeout=15)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    u = body["user"]
+    assert u["city"] == "Istanbul"
+    assert u["recently_played_games"] == ["Valorant", "CS2", "Apex Legends"]
+    assert u["playtime_slots"] == ["18:00-21:00", "21:00-00:00"]
+    assert u.get("onboarding_complete") is False, "Fresh signup must have onboarding_complete=False"
+
+    # /auth/me confirms persistence
+    me = session.get(f"{API}/auth/me", headers=auth(body["token"]), timeout=10).json()
+    assert me["city"] == "Istanbul"
+    assert me["recently_played_games"] == ["Valorant", "CS2", "Apex Legends"]
+    assert me["playtime_slots"] == ["18:00-21:00", "21:00-00:00"]
+    assert me.get("onboarding_complete") is False
+
+
+def test_signup_caps_recent_games_at_3_and_slots_at_2(session):
+    """Server must enforce max 3 recent games and max 2 playtime slots."""
+    email = f"cap_{uuid.uuid4().hex[:8]}@test.com"
+    payload = {
+        "email": email, "password": "Pass1234!", "username": f"cap_{uuid.uuid4().hex[:6]}",
+        "age": 25, "country": "USA", "city": "Austin", "languages": ["English"], "bio": "",
+        "top_games": [{"name": "CS2", "hours": 10}],
+        "recently_played_games": ["Valorant", "CS2", "Apex Legends", "Rust", "Minecraft"],
+        "playtime_slots": ["00:00-03:00", "12:00-15:00", "18:00-21:00", "21:00-00:00"],
+    }
+    r = session.post(f"{API}/auth/signup", json=payload, timeout=15)
+    assert r.status_code == 200, r.text
+    u = r.json()["user"]
+    assert len(u["recently_played_games"]) == 3
+    assert len(u["playtime_slots"]) == 2
+
+
+def test_seed_user_onboarding_complete_true(session):
+    """Seed user must bypass the Connect Steam gate."""
+    r = session.post(f"{API}/auth/login", json={"email": SEED_A, "password": PWD}, timeout=10)
+    assert r.status_code == 200
+    me = session.get(f"{API}/auth/me", headers=auth(r.json()["token"]), timeout=10).json()
+    assert me.get("onboarding_complete") is True, "Seed user must have onboarding_complete=True"
+
+
+def test_admin_onboarding_complete_true(session):
+    r = session.post(f"{API}/auth/login", json={"email": "admin@gaminder.app", "password": "Gaminder@2025!"}, timeout=10)
+    assert r.status_code == 200, r.text
+    me = session.get(f"{API}/auth/me", headers=auth(r.json()["token"]), timeout=10).json()
+    assert me.get("onboarding_complete") is True, "Admin must have onboarding_complete=True"
 
 
 def auth(token):

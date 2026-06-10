@@ -42,7 +42,7 @@ export default function Profile() {
             <Text style={styles.name} testID="profile-username">{user.username}, {user.age}</Text>
             <View style={styles.metaRow}>
               <MapPin size={14} color="#E5DCD4" />
-              <Text style={styles.metaText}>{user.country}</Text>
+              <Text style={styles.metaText}>{user.city ? `${user.city}, ${user.country}` : user.country}</Text>
               <Text style={styles.metaDot}>•</Text>
               <Languages size={14} color="#E5DCD4" />
               <Text style={styles.metaText}>{(user.languages || []).join(", ")}</Text>

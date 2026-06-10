@@ -23,8 +23,13 @@ function RootNav() {
     const inOnboarding = segments[0] === "onboarding";
     if (!user && !inAuth) {
       router.replace("/auth/welcome");
-    } else if (user && (inAuth || inOnboarding)) {
-      router.replace("/(tabs)/swipe");
+    } else if (user) {
+      const needsOnboarding = !user.onboarding_complete;
+      if (needsOnboarding && !inOnboarding) {
+        router.replace("/onboarding/connect-steam");
+      } else if (!needsOnboarding && (inAuth || inOnboarding)) {
+        router.replace("/(tabs)/swipe");
+      }
     }
   }, [user, loading, segments, router]);
 
